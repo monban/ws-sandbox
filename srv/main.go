@@ -25,28 +25,12 @@ func (s wssrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close(websocket.StatusNormalClosure, "goodbye")
 	ctx := ws.CloseRead(r.Context())
-	msgs := make(chan Thing)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msgs <- Thing{TimeStamp: time.Now()}:
-				time.Sleep(3 * time.Second)
-			}
-		}
-	}()
 
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("Closing connection: %v", ctx.Err())
-			return
-
-		case msg := <-msgs:
-			wsjson.Write(r.Context(), ws, msg)
-		}
+	for ctx.Err() == nil {
+		wsjson.Write(ctx, ws, Thing{TimeStamp: time.Now()})
+		time.Sleep(3 * time.Second)
 	}
+	log.Printf("Closing connection: %v", ctx.Err())
 }
 
 func main() {
