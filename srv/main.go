@@ -24,13 +24,19 @@ func (s wssrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Println(err.Error())
 	}
 	defer ws.Close(websocket.StatusNormalClosure, "goodbye")
+
+	// By creating our context from the http.Request's context, we get a context
+	// that will cancel if the HTTP connection breaks. By calling CloseRead we
+	// tell the websocket library we don't intend to read from this socket
+	// and allow it to repond to control frames
 	ctx := ws.CloseRead(r.Context())
 
+	// Loop until the context is canceled
 	for ctx.Err() == nil {
 		wsjson.Write(ctx, ws, Thing{TimeStamp: time.Now()})
 		time.Sleep(3 * time.Second)
 	}
-	log.Printf("Closing connection: %v", ctx.Err())
+	log.Printf("Closing connection %v, reason: %v", r.RemoteAddr, ctx.Err())
 }
 
 func main() {
