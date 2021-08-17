@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	//"encoding/json"
 	"io"
 	"log"
 	"time"
@@ -31,31 +31,38 @@ func run(ctx context.Context) {
 			continue
 		}
 		log.Println("Socket connected")
-		if err := readStuff(ctx, ws); err != nil {
-			log.Println(err)
+		in := readStuff(ctx, ws)
+		for {
+			select {
+			case data := <- in:
+				log.Println(data)
+			case <-time.After(1*time.Second):
+				ws.Write(ctx, 1, []byte("hello"))
+			case <-ctx.Done():
+				log.Printf("Socket closing: %v", ctx.Err())
+				return
+			}
 		}
-		time.Sleep(sleepTimeout)
 	}
 }
 
-func readStuff(ctx context.Context, ws *websocket.Conn) error {
-	var thing Thing
-	for {
-		ctx_to, _ := context.WithTimeout(ctx, 5*time.Second)
-		mtype, r, err := ws.Reader(ctx_to)
-		if err != nil {
-			return err
+func readStuff(ctx context.Context, ws *websocket.Conn) (<-chan string) {
+	//var thing Thing
+	c := make(chan string)
+	go func() {
+		for ctx.Err() == nil {
+			_, r, err := ws.Reader(ctx)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			data, err := io.ReadAll(r)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			c <- string(data)
 		}
-
-		data, err := io.ReadAll(r)
-		if err != nil {
-			return err
-		}
-
-		if err := json.Unmarshal(data, &thing); err != nil {
-			return err
-		}
-
-		log.Printf("%d %v\n", mtype, thing)
-	}
+	}()
+	return c
 }

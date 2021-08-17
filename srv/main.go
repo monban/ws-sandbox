@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"runtime"
 	"time"
+	"io"
 
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
@@ -24,12 +25,21 @@ func (s wssrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Println(err.Error())
 	}
 	defer ws.Close(websocket.StatusNormalClosure, "goodbye")
+	ctx := r.Context()
 
-	// By creating our context from the http.Request's context, we get a context
-	// that will cancel if the HTTP connection breaks. By calling CloseRead we
-	// tell the websocket library we don't intend to read from this socket
-	// and allow it to repond to control frames
-	ctx := ws.CloseRead(r.Context())
+	go func() {
+		for ctx.Err() == nil {
+			_, r, err := ws.Reader(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+			data, err := io.ReadAll(r)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println(string(data))
+		}
+	}()
 
 	// Loop until the context is canceled
 	for ctx.Err() == nil {
