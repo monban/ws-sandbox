@@ -1,11 +1,11 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"runtime"
 	"time"
-	"io"
 
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
@@ -31,11 +31,13 @@ func (s wssrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for ctx.Err() == nil {
 			_, r, err := ws.Reader(ctx)
 			if err != nil {
-				log.Fatal(err)
+				log.Println(err)
+				return
 			}
 			data, err := io.ReadAll(r)
 			if err != nil {
-				log.Fatal(err)
+				log.Println(err)
+				return
 			}
 			log.Println(string(data))
 		}

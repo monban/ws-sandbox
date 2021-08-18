@@ -16,15 +16,19 @@ type Thing struct {
 	TimeStamp time.Time
 }
 
-func main() {
-	ctx := context.Background()
-	log.Println("Starting...")
-	run(ctx)
+type Writer interface {
+	Write(context.Context, websocket.MessageType, []byte) error
 }
 
-func run(ctx context.Context) {
+func main() {
+	ctx := context.Background()
+	var err error
+	var ws *websocket.Conn
+	log.Println("Starting...")
+	// Start an infinite loop which sets up a socket and begins communicating on
+	// it. If the connection is lost, start over and make a new one.
 	for {
-		ws, _, err := websocket.Dial(ctx, "ws://localhost:8080", nil)
+		ws, _, err = websocket.Dial(ctx, "ws://localhost:8080", nil)
 		if err != nil {
 			log.Printf("Socket failed to connect: %v", err)
 			time.Sleep(sleepTimeout)
@@ -32,21 +36,31 @@ func run(ctx context.Context) {
 		}
 		log.Println("Socket connected")
 		in := readStuff(ctx, ws)
-		for {
-			select {
-			case data := <- in:
-				log.Println(data)
-			case <-time.After(1*time.Second):
-				ws.Write(ctx, 1, []byte("hello"))
-			case <-ctx.Done():
-				log.Printf("Socket closing: %v", ctx.Err())
-				return
-			}
+		err = run(ctx, ws, in)
+		if err != nil {
+			log.Printf("Socket closed: %v", err)
+			ws.Close(websocket.StatusInternalError, err.Error())
 		}
 	}
 }
 
-func readStuff(ctx context.Context, ws *websocket.Conn) (<-chan string) {
+func run(ctx context.Context, ws Writer, in <-chan string) error {
+	for {
+		select {
+		case data := <-in:
+			log.Println(data)
+		case <-time.After(1 * time.Second):
+			err := ws.Write(ctx, 1, []byte("hello"))
+			if err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func readStuff(ctx context.Context, ws *websocket.Conn) <-chan string {
 	//var thing Thing
 	c := make(chan string)
 	go func() {
